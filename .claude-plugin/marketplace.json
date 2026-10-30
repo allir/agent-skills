@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "allir",
+  "description": "Alli's agent skills, bundled as Claude Code plugins.",
+  "owner": {
+    "name": "Alli",
+    "url": "https://github.com/allir"
+  },
+  "plugins": [
+    {
+      "name": "memory",
+      "description": "A global memory store that every session loads, next to Claude Code's per-project auto memory",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/global-memory"
+      ],
+      "category": "productivity",
+      "tags": ["memory"]
+    }
+  ]
+}
