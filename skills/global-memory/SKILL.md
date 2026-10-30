@@ -23,7 +23,7 @@ The global store only works if every session loads its index. If `~/.claude/memo
 
    ```markdown
    ## Global memory
-   Cross-project memories live in `~/.claude/memory/`, alongside the per-project auto memory. Facts that hold across repos go global; only single-repo facts go in project memory. Use the `global-memory` skill (`memory:global-memory` when installed as a plugin) before reading or writing either.
+   Cross-project memories live in `~/.claude/memory/`, alongside the per-project auto memory. Facts that hold across repos go global; only single-repo facts go in project memory. Use the `global-memory` skill (`global-memory:global-memory` when installed as a plugin) before reading or writing either.
 
    @~/.claude/memory/MEMORY.md
    ```

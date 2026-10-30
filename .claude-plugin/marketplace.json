@@ -8,7 +8,7 @@
   },
   "plugins": [
     {
-      "name": "memory",
+      "name": "global-memory",
       "description": "A global memory store that every session loads, next to Claude Code's per-project auto memory",
       "source": "./",
       "strict": false,

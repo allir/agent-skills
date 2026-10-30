@@ -12,10 +12,10 @@ Inside a Claude Code session:
 
 ```
 /plugin marketplace add allir/agent-skills
-/plugin install memory@allir
+/plugin install global-memory@allir
 ```
 
-Third-party marketplaces don't auto-update by default. To follow new versions, open `/plugin` → **Marketplaces** → `allir` → **Enable auto-update**. Plugin skills are namespaced, e.g. `memory:global-memory`.
+Third-party marketplaces don't auto-update by default. To follow new versions, open `/plugin` → **Marketplaces** → `allir` → **Enable auto-update**. Plugin skills are namespaced, e.g. `global-memory:global-memory`.
 
 ### Any agent: `npx skills`
 
@@ -30,7 +30,7 @@ npx skills add allir/agent-skills --skill global-memory  # one skill
 
 | Plugin | Skills | What it's for |
 | --- | --- | --- |
-| `memory` | [`global-memory`](skills/global-memory/SKILL.md) | A cross-project memory store every session loads, next to Claude Code's per-project auto memory: where a memory belongs, the file format, and the one-time setup |
+| `global-memory` | [`global-memory`](skills/global-memory/SKILL.md) | A cross-project memory store every session loads, next to Claude Code's per-project auto memory: where a memory belongs, the file format, and the one-time setup |
 
 ## License
 
