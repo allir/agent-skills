@@ -13,6 +13,7 @@ Inside a Claude Code session:
 ```
 /plugin marketplace add allir/agent-skills
 /plugin install global-memory@allir
+/plugin install golang@allir
 ```
 
 Third-party marketplaces don't auto-update by default. To follow new versions, open `/plugin` → **Marketplaces** → `allir` → **Enable auto-update**. Plugin skills are namespaced, e.g. `global-memory:global-memory`.
@@ -31,6 +32,7 @@ npx skills add allir/agent-skills --skill global-memory  # one skill
 | Plugin | Skills | What it's for |
 | --- | --- | --- |
 | `global-memory` | [`global-memory`](skills/global-memory/SKILL.md) | A cross-project memory store every session loads, next to Claude Code's per-project auto memory: where a memory belongs, the file format, and the one-time setup |
+| `golang` | [`go-structure`](skills/go-structure/SKILL.md), [`go-style`](skills/go-style/SKILL.md) | Writing and reviewing Go: package layout, file splitting and declaration order; house style above the linters for errors, state, logging and tests |
 
 ## License
 

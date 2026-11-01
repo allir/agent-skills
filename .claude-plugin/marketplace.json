@@ -17,6 +17,18 @@
       ],
       "category": "productivity",
       "tags": ["memory"]
+    },
+    {
+      "name": "golang",
+      "description": "Skills for writing and reviewing Go code",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/go-structure",
+        "./skills/go-style"
+      ],
+      "category": "development",
+      "tags": ["go", "golang"]
     }
   ]
 }
