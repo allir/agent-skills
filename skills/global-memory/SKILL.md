@@ -1,31 +1,33 @@
 ---
 name: global-memory
-description: Read and write the user's global memory in ~/.claude/memory/, the cross-project counterpart to per-project auto memory. Use before saving any memory, to decide whether it is global or project-scoped; when a global index line looks relevant and you need the full file; and when the user says "remember this everywhere", "make this a global memory", "move this memory to global", or asks what is in global memory.
+description: Read and write the user's global memory in <config>/memory/, the cross-project counterpart to per-project auto memory. Use before saving any memory, to decide whether it is global or project-scoped; when a global index line looks relevant and you need the full file; and when the user says "remember this everywhere", "make this a global memory", "move this memory to global", or asks what is in global memory.
 ---
 
 # Global Memory
+
+`<config>` is the Claude config directory: `$CLAUDE_CONFIG_DIR` when set, otherwise `~/.claude`. Resolve it once (`echo "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"`) and use the real path everywhere below.
 
 Two memory stores, same file format:
 
 | Store | Path | Loaded |
 |---|---|---|
-| Global | `~/.claude/memory/` | Index imported by `~/.claude/CLAUDE.md`, so every session sees it |
-| Project | `~/.claude/projects/<launch-dir>/memory/` | Only in sessions launched from that directory |
+| Global | `<config>/memory/` | Index imported by `<config>/CLAUDE.md`, so every session sees it |
+| Project | `<config>/projects/<launch-dir>/memory/` | Only in sessions launched from that directory |
 
 Each store has a `MEMORY.md` index (one line per memory) plus one file per fact. Only the index is in context; read a memory file when its index line looks relevant.
 
 ## Setup
 
-The global store only works if every session loads its index. If `~/.claude/memory/MEMORY.md` is missing, or `~/.claude/CLAUDE.md` lacks the section below, tell the user and offer to set it up:
+The global store only works if every session loads its index. If `<config>/memory/MEMORY.md` is missing, or `<config>/CLAUDE.md` lacks the section below, tell the user and offer to set it up:
 
-1. Create `~/.claude/memory/MEMORY.md` (empty is fine).
-2. Add this section to `~/.claude/CLAUDE.md`. The import loads the index into every session; the text tells each session the store exists, since the built-in memory instructions only know the project store:
+1. Create `<config>/memory/MEMORY.md` (empty is fine).
+2. Add this section to `<config>/CLAUDE.md`, with `<config>` written out as the real path (imports don't expand variables). The import loads the index into every session; the text tells each session the store exists, since the built-in memory instructions only know the project store:
 
    ```markdown
    ## Global memory
-   Cross-project memories live in `~/.claude/memory/`, alongside the per-project auto memory. Facts that hold across repos go global; only single-repo facts go in project memory. Use the `global-memory` skill (`global-memory:global-memory` when installed as a plugin) before reading or writing either.
+   Cross-project memories live in `<config>/memory/`, alongside the per-project auto memory. Facts that hold across repos go global; only single-repo facts go in project memory. Use the `global-memory` skill (`global-memory:global-memory` when installed as a plugin) before reading or writing either.
 
-   @~/.claude/memory/MEMORY.md
+   @<config>/memory/MEMORY.md
    ```
 
 ## Invoked with no request
