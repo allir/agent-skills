@@ -1,0 +1,464 @@
+"""Tests for assemble.py and flow.py: SNIP expansion and its refusals, the body guard, and FLOW parsing."""
+
+import contextlib
+import hashlib
+import io
+import tempfile
+import unittest
+from pathlib import Path
+from types import SimpleNamespace
+
+import assemble
+import flow
+
+DIFF = """\
+diff --git a/main.go b/main.go
+index 1111111..2222222 100644
+--- a/main.go
++++ b/main.go
+@@ -1,4 +1,5 @@ package main
+ package main
+
+-func old() {}
++func run() {}
++func stop() {}
+@@ -20,2 +21,2 @@ func main() {
+ 	x := 1
+-	y := x & 2
++	y := x < 2
+diff --git a/dir with b/space.go b/dir with b/space.go
+new file mode 100644
+index 0000000..3333333
+--- /dev/null
++++ b/dir with b/space.go
+@@ -0,0 +1,1 @@
++package dir
+diff --git a/gone.go b/gone.go
+deleted file mode 100644
+index 4444444..0000000
+--- a/gone.go
++++ /dev/null
+@@ -1,1 +0,0 @@
+-package gone
+"""
+
+
+def new_file(path, *lines):
+    """A diff adding one file; its first line is diff line 6."""
+    return (f"diff --git a/{path} b/{path}\nnew file mode 100644\n--- /dev/null\n+++ b/{path}\n"
+            f"@@ -0,0 +1,{len(lines)} @@\n" + "".join(f"+{line}\n" for line in lines))
+
+
+def snip(spec, notes=None):
+    diff = DIFF.rstrip("\n").split("\n")
+    return assemble.render(diff, assemble.hunk_mask(diff), spec, [] if notes is None else notes)
+
+
+class SnipTest(unittest.TestCase):
+    def test_lines_become_spans_and_are_escaped(self):
+        out = snip("13-14").split("\n")
+        self.assertEqual(out, ['<span class="d">\ty := x &amp; 2</span>', '<span class="a">\ty := x &lt; 2</span>'])
+
+    def test_hunk_header_becomes_one_fold(self):
+        out = snip("9-12").split("\n")
+        self.assertEqual(out[0], '<span class="a">func run() {}</span>')
+        self.assertEqual(out[1], '<span class="a">func stop() {}</span>')
+        self.assertEqual(out[2], assemble.FOLD)
+        self.assertNotIn("@@", "".join(out))
+
+    def test_range_starting_on_a_hunk_header_has_no_leading_fold(self):
+        self.assertEqual(snip("11-12"), '<span class="c">\tx := 1</span>')
+
+    def test_non_adjacent_ranges_are_joined_by_a_fold(self):
+        out = snip("6-6,12-12").split("\n")
+        self.assertEqual(out, ['<span class="c">package main</span>', '<span class="fold" data-hidden="changed"></span>',
+                               '<span class="c">\tx := 1</span>'])
+
+    def test_fold_says_what_it_hides(self):
+        self.assertIn('<span class="fold" data-hidden="removed"></span>', snip("7-7,9-10"))
+        self.assertIn('<span class="fold" data-hidden="added"></span>', snip("6-8,10-10"))
+        self.assertIn('<span class="fold" data-hidden="changed"></span>', snip("6-6,9-9"))
+        self.assertIn(assemble.FOLD, snip("6-6,8-8"))
+
+    def test_range_past_file_end_is_trimmed_with_a_note(self):
+        notes = []
+        out = snip("13-16", notes)
+        self.assertEqual(len(out.split("\n")), 2)
+        self.assertIn("trimmed to 13-14", notes[0])
+
+    def test_refusals(self):
+        for spec, reason in [
+            ("14-13", "backwards"),
+            ("1-999", "outside the diff"),
+            ("12-x", "bad range"),
+            ("12-12,21-21", "span several files"),
+            ("1-5", "file header"),
+        ]:
+            with self.subTest(spec=spec), self.assertRaisesRegex(assemble.SnipError, reason):
+                snip(spec)
+
+    def test_cross_file_error_names_paths_with_spaces(self):
+        with self.assertRaises(assemble.SnipError) as err:
+            snip("12-12,21-21")
+        self.assertIn("dir with b/space.go", str(err.exception))
+        self.assertIn("main.go", str(err.exception))
+
+
+class PathTest(unittest.TestCase):
+    def test_paths_come_from_the_plus_and_minus_lines(self):
+        diff = DIFF.rstrip("\n").split("\n")
+        headers = [n for n, line in enumerate(diff, 1) if line.startswith("diff --git ")]
+        self.assertEqual([assemble.path_at(diff, h) for h in headers], ["main.go", "dir with b/space.go", "gone.go"])
+
+
+class DiffTest(unittest.TestCase):
+    def setUp(self):
+        self.diff = DIFF.rstrip("\n").split("\n")
+
+    def test_line_anchors_follow_both_sides(self):
+        for n, anchor in [(5, "R1"), (8, "L3"), (9, "R3"), (13, "L21"), (14, "R22"), (21, "R1"), (28, "L1")]:
+            with self.subTest(line=n):
+                self.assertEqual(assemble.line_anchor(self.diff, n), anchor)
+
+    def test_no_anchor_outside_a_hunk(self):
+        self.assertIsNone(assemble.line_anchor(self.diff, 2))
+
+    def test_files_and_counts(self):
+        files = assemble.diff_files(self.diff)
+        self.assertEqual([(f["path"], f["adds"], f["dels"]) for f in files],
+                         [("main.go", 3, 2), ("dir with b/space.go", 1, 0), ("gone.go", 0, 1)])
+
+    def test_generated_files_are_known_by_their_header(self):
+        def generated(first_hunk, *lines):
+            diff = ["diff --git a/x b/x", "--- a/x", "+++ b/x", first_hunk, *lines]
+            return assemble.diff_files(diff)[0]["generated"]
+
+        self.assertTrue(generated("@@ -0,0 +1,2 @@", "+// Code generated by mockgen. DO NOT EDIT.", "+package x"))
+        self.assertTrue(generated("@@ -1,3 +1,3 @@", " /**", "- * @generated v1", "+ * @generated v2"))
+        self.assertFalse(generated("@@ -1,2 +1,2 @@", " package x", "+// tools that read generated code"))
+        self.assertFalse(generated("@@ -40,2 +40,2 @@", " // Code generated by hand. DO NOT EDIT.", "+x"))
+
+
+class IndexTest(unittest.TestCase):
+    def test_landmarks_across_languages(self):
+        for line in ["+func (s *S) Run() error {", "+async def fetch(self):", " class Cache:",
+                     "+export const Panel = ({ rows }: Props) => {", "+const useRows = () =>",
+                     "+export const Form: React.FC<Props> = (", "+export const Form = ({", "+export default function App() {",
+                     "+export type Row = { id: string }", "+export interface Props {", "+interface Props {",
+                     "+  async load(id: string): Promise<Row> {", "+  render() {", "+    public void run() {",
+                     "+pub(crate) fn parse(s: &str) {", "+  private static <T> T first(List<T> xs) {",
+                     "+  private load<T>(id: string): T {"]:
+            with self.subTest(line=line):
+                self.assertRegex(line, assemble.LANDMARK)
+        for line in ["+  if (ready) {", "+  for (const r of rows) {", "+const total = (a + b) * 2",
+                     "+  return (x) {", "+  rows.map((r) => r.id)", "-func gone() {}", "+// function name",
+                     "+  private final Map<String, Foo> cache = new HashMap<>();"]:
+            with self.subTest(line=line):
+                self.assertNotRegex(line, assemble.LANDMARK)
+
+
+RAIL = ('<nav class="rail"><ol>\n'
+        '      <li><a href="#core"><span class="n">1</span>Core</a></li>\n'
+        '      <li><a href="#tests"><span class="n">2</span>Tests</a></li>\n'
+        '      <li><a href="#review"><span class="n">3</span>Review notes</a></li>\n'
+        '    </ol>\n    <div class="stat">3 files</div>\n  </nav>')
+MAIN_HASH = "#diff-" + hashlib.sha256(b"main.go").hexdigest()
+
+
+class BuildTest(unittest.TestCase):
+    def build(self, body, diff=DIFF, **opts):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            (tmp / "body.html").write_text(body)
+            (tmp / "pr.diff").write_text(diff)
+            args = SimpleNamespace(repo="acme/svc", pr="7", name=None, diff=tmp / "pr.diff", standalone=False,
+                                   body=tmp / "body.html", out=tmp / "out.html")
+            vars(args).update(opts)
+            err = io.StringIO()
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
+                code = assemble.build(args)
+            page = args.out.read_text() if args.out.exists() else ""
+            return code, page, err.getvalue()
+
+    def guide(self, core_chips='<span class="file"><b>main.go</b></span>', title="main.go", full=True):
+        rest = ('<div class="diff collapsed"><div class="diff-title"><span>main.go</span><span>rename</span></div>\n'
+                '<pre><!--SNIP 8-10--></pre></div>') if full else ""
+        gone = ('<div class="diff collapsed"><div class="diff-title"><span>gone.go</span><span>removed</span></div>\n'
+                '<pre><!--SNIP 28-28--></pre></div>') if full else ""
+        return (f'<div class="page">{RAIL}<main>\n'
+                f'    <section class="group" id="core"><div class="files">{core_chips}</div>'
+                '<figure class="figure"><!--FLOW a -> b*--></figure>'
+                f'<div class="diff"><div class="diff-title"><span>{title}</span><span>run</span></div>\n'
+                f'<pre><!--SNIP 13-14--></pre></div>{rest}</section>\n'
+                '    <section class="group supporting" id="tests"><div class="files">'
+                f'<span class="file"><b>dir with b/</b></span><span class="file"><b>gone.go</b></span></div>{gone}</section>\n'
+                '    <section class="group" id="review"></section>\n'
+                '</main></div>')
+
+    def test_builds_a_page(self):
+        code, page, _ = self.build('<div class="page"><pre><!--SNIP 13-14--></pre>'
+                                   '<figure class="figure"><!--FLOW a -> b*--></figure></div>')
+        self.assertEqual(code, 0)
+        self.assertIn("<title>PR 7 Review Guide</title>", page)
+        self.assertIn("x &lt; 2", page)
+        self.assertIn('<svg class="flow"', page)
+
+    def test_standalone_page_starts_with_a_doctype(self):
+        for standalone in (False, True):
+            with self.subTest(standalone=standalone):
+                _, page, _ = self.build('<div class="page"></div>', standalone=standalone)
+                self.assertEqual(page.startswith("<!doctype html>"), standalone)
+
+    def test_refuses_active_content(self):
+        for bad in ['<SCRIPT>x</SCRIPT>', '<style>p{}</style>', '<iframe src="x">', '<img src=x onerror="x">',
+                    '<a href="javascript:x">', '<a href = \' javascript:x\'>', '<a href="&#106;avascript:x">',
+                    '<a href="java&#9;script:x">', '<a href="java\tscript:x">', '<a href="data:text/html,x">',
+                    '<a href="#x"/onclick="x">',
+                    '<form><button formaction="javascript:x">go</button></form>',
+                    '<svg><set attributeName="href" to="javascript:x"/></svg>',
+                    '<meta http-equiv="refresh" content="0;url=https://example.com">',
+                    '<base href="https://example.com/">', '<link rel="stylesheet" href="https://example.com/x.css">']:
+            with self.subTest(bad=bad):
+                code, page, err = self.build(f'<div class="page">{bad}</div>')
+                self.assertEqual(code, 1)
+                self.assertEqual(page, "")
+                self.assertIn("active content", err)
+
+    def test_allows_escaped_markup_and_prose(self):
+        code, _, err = self.build('<div class="page"><p>Runs on startup; see <code>&lt;script onload=x&gt;</code>'
+                                  ' and javascript: URLs.</p><pre><span class="a">&lt;a href="javascript:x"&gt;</span></pre>'
+                                  '<a href="#group">next</a>'
+                                  '<a href="https://github.com/acme/svc/pull/7/files?w=1&amp;diff=split">PR</a>'
+                                  '<a href="mailto:team@example.com">team</a></div>')
+        self.assertEqual(code, 0, err)
+
+    def test_bad_snip_fails_before_writing(self):
+        code, page, err = self.build('<div class="page"><pre><!--SNIP 1-5--></pre></div>')
+        self.assertEqual(code, 1)
+        self.assertEqual(page, "")
+        self.assertIn("<!--SNIP 1-5-->", err)
+
+    def test_chips_and_titles_link_into_the_pr(self):
+        code, page, err = self.build(self.guide())
+        self.assertEqual(code, 0, err)
+        base = "https://github.com/acme/svc/pull/7/files"
+        self.assertIn(f'<span class="file"><a class="gh" href="{base}{MAIN_HASH}" target="_blank" rel="noopener">'
+                      '<b>main.go</b></a>', page)
+        self.assertIn(f'<span><a class="gh" href="{base}{MAIN_HASH}L21" target="_blank" rel="noopener">main.go</a>',
+                      page)
+
+    def test_local_changes_build_without_links(self):
+        code, page, err = self.build(self.guide(), repo=None, pr=None, name="feat/<x>")
+        self.assertEqual(code, 0, err)
+        self.assertNotIn("warning", err)
+        self.assertNotIn('class="gh"', page)
+        self.assertIn('<span class="file"><b>main.go</b></span>', page)
+        self.assertIn("<title>feat/&lt;x&gt; Review Guide</title>", page)
+
+    def test_local_rebuild_drops_pr_links(self):
+        _, linked, _ = self.build(self.guide())
+        code, page, err = self.build(linked, repo=None, pr=None)
+        self.assertEqual(code, 0, err)
+        self.assertNotIn('class="gh"', page)
+        self.assertIn("<title>Local changes Review Guide</title>", page)
+
+    def test_repo_and_pr_go_together(self):
+        for opts in ({"pr": None}, {"repo": None}):
+            with self.subTest(opts=opts):
+                code, page, err = self.build(self.guide(), **opts)
+                self.assertEqual(code, 1)
+                self.assertEqual(page, "")
+                self.assertIn("--repo and --pr go together", err)
+
+    def test_every_file_covered_means_no_warnings(self):
+        _, _, err = self.build(self.guide())
+        self.assertNotIn("warning", err)
+
+    def test_warns_about_uncovered_files_and_unknown_chips(self):
+        _, page, err = self.build(self.guide(core_chips='<span class="file"><b>nope.go</b></span>'))
+        self.assertIn("file chip 'nope.go' is not in the diff", err)
+        self.assertIn("1 changed files have no file chip in any group: main.go", err)
+        self.assertRegex(page, r'<li><span><span class="cov"[^>]*></span><span class="path"><b>main.go</b></span>')
+
+    def test_warns_when_a_title_names_another_file(self):
+        _, _, err = self.build(self.guide(title="other.go"))
+        self.assertIn("snippet titled 'other.go' shows lines from 'main.go'", err)
+
+    def test_files_index_links_each_file_to_its_group(self):
+        _, page, _ = self.build(self.guide(full=False))
+        index = page[page.index('<details class="files-index">'):page.index("</details>")]
+        self.assertIn('<a href="#core"><span class="cov" role="img" style="--p: 40%" '
+                      'title="2 of 5 changed lines shown in snippets" aria-label="2 of 5 changed lines shown in snippets">'
+                      '</span><span class="path"><b>main.go</b></span>'
+                      '<span class="add">+3</span><span class="del">−2</span></a>', index)
+        self.assertIn('style="--p: 0%" title="0 of 1 changed lines shown in snippets" aria-label="0 of 1 changed '
+                      'lines shown in snippets"></span><span class="path">dir with b/<wbr><b>space.go</b></span>', index)
+        self.assertLess(page.index("files-index"), page.index('<div class="stat">'))
+        self.assertIn("Files <span class=\"n\">3</span> <span class=\"share\">· 29% shown</span></summary>"
+                      "<p class=\"cov-total\">Snippets show 2 of 7 changed lines: 40% of core, 0% of supporting.</p>"
+                      "<ol>", index)
+        _, flat, _ = self.build(self.guide(full=False).replace("group supporting", "group"))
+        self.assertIn("<p class=\"cov-total\">Snippets show 2 of 7 changed lines.</p>", flat)
+
+    def test_shown_lines_count_snippet_lines_by_content(self):
+        diff = DIFF.rstrip("\n").split("\n")
+        body = ('<div class="diff"><div class="diff-title"><span><a class="gh" href="x">main.go</a></span></div>\n'
+                '<pre><span class="a">func run() {}</span>\n<span class="c">package main</span>\n'
+                '<span class="d">\ty := x &amp; 2</span></pre></div>'
+                '<div class="diff"><div class="diff-title"><span>gone.go</span></div>'
+                '<pre><span class="a">package gone</span></pre></div>')
+        self.assertEqual(assemble.shown_lines(body, diff), {"main.go": 2, "dir with b/space.go": 0, "gone.go": 0})
+
+    def test_blank_changed_lines_need_no_snippet(self):
+        diff = ["diff --git a/x.go b/x.go", "--- a/x.go", "+++ b/x.go", "@@ -1,1 +1,3 @@", " a", "+b", "+"]
+        body = '<div class="diff"><div class="diff-title"><span>x.go</span></div><pre><span class="a">b</span></pre></div>'
+        self.assertEqual(assemble.shown_lines(body, diff), {"x.go": 2})
+
+    def test_supporting_tier_gets_dividers(self):
+        _, page, _ = self.build(self.guide())
+        self.assertEqual(page.count('<li class="tier">Supporting changes</li>'), 1)
+        self.assertEqual(page.count('<li class="tier">'), 2)
+        self.assertLess(page.index('<li class="tier">'), page.index('<li><a href="#tests">'))
+        self.assertLess(page.index('<p class="eyebrow tier">'), page.index('id="tests"'))
+        self.assertGreater(page.index('<p class="eyebrow tier">'), page.index('id="core"'))
+
+    def test_review_notes_get_a_label_with_or_without_a_supporting_tier(self):
+        for body in (self.guide(), self.guide().replace("group supporting", "group")):
+            with self.subTest(supporting="group supporting" in body):
+                _, page, _ = self.build(body)
+                self.assertRegex(page, r'<li class="tier">Review</li>\s*<li><a href="#review">')
+
+    def test_warns_about_every_file_not_fully_shown(self):
+        _, _, err = self.build(self.guide(full=False))
+        self.assertIn("'main.go' shows 2 of its 5 changed lines", err)
+        self.assertIn("'gone.go' shows 0 of its 1 changed lines", err)
+        self.assertNotIn("space.go", err)
+
+    def test_a_folded_snippet_still_counts_as_shown(self):
+        _, page, err = self.build(self.guide().replace('<div class="diff">', '<div class="diff collapsed">'))
+        self.assertNotIn("changed lines;", err)
+        self.assertIn('<div class="diff collapsed">', page)
+        self.assertIn('style="--p: 100%"', page)
+
+    def test_only_unfolded_snippets_have_a_length_limit(self):
+        body = '<div class="diff"><pre>A</pre></div><div class="diff collapsed"><div class="diff-title"></div><pre>B</pre>'
+        self.assertFalse(assemble.folded_at(body, body.index("A")))
+        self.assertTrue(assemble.folded_at(body, body.index("B")))
+
+    def test_warns_about_a_long_unfolded_snippet(self):
+        diff = new_file("long.go", *(f"x{i}" for i in range(40)))
+        for cls, warned in [("diff", True), ("diff collapsed", False)]:
+            with self.subTest(cls=cls):
+                body = (f'<div class="page"><div class="{cls}"><div class="diff-title"><span>long.go</span></div>'
+                        '<pre><!--SNIP 6-45--></pre></div></div>')
+                _, _, err = self.build(body, diff=diff)
+                self.assertEqual("is 40 lines" in err, warned, err)
+
+    def test_a_wide_diagram_warns(self):
+        wide = " -> ".join(f"step{i}SomewhatLongName" for i in range(8))
+        _, _, err = self.build(self.guide().replace("<!--FLOW a -> b*-->", f"<!--FLOW {wide}-->"))
+        self.assertRegex(err, r"FLOW #1 is \d+ px wide")
+        _, _, err = self.build(self.guide())
+        self.assertNotIn("px wide", err)
+
+    def test_lock_files_and_generated_code_are_exempt(self):
+        for path in ["go.sum", "web/package-lock.json", "Cargo.lock", "api/v1/api.pb.go", "x_pb2.py", "zz_generated.deepcopy.go"]:
+            with self.subTest(path=path):
+                self.assertRegex(path, assemble.LOCK_OR_GENERATED)
+        for path in ["go.mod", "package.json", "internal/lock.go", "generator.go"]:
+            with self.subTest(path=path):
+                self.assertNotRegex(path, assemble.LOCK_OR_GENERATED)
+
+    def test_generated_code_needs_no_snippet(self):
+        body = ('<div class="page"><section class="group" id="g"><div class="files">'
+                '<span class="file"><b>mock.go</b></span></div></section></div>')
+        for header, warned in [("// Code generated by mockgen. DO NOT EDIT.", False), ("// Written by hand.", True)]:
+            with self.subTest(header=header):
+                _, _, err = self.build(body, diff=new_file("mock.go", header, "package mock"))
+                self.assertEqual("'mock.go' shows 0 of its 2 changed lines" in err, warned, err)
+
+    def test_warns_about_a_diagram_after_a_snippet(self):
+        _, _, err = self.build(self.guide())
+        self.assertNotIn("diagram", err)
+        figure = '<figure class="figure"><!--FLOW a -> b*--></figure>'
+        after = self.guide().replace(figure, "").replace("</pre></div></section>", "</pre></div>" + figure + "</section>", 1)
+        _, _, err = self.build(after)
+        self.assertIn("group 'core' has its diagram after a snippet", err)
+
+    def test_warns_when_core_follows_supporting(self):
+        body = self.guide().replace('<section class="group" id="review">', '<section class="group" id="late">')
+        _, _, err = self.build(body)
+        self.assertIn("core group 'late' comes after a supporting group", err)
+
+    def test_numbers_follow_the_page_whatever_the_agent_wrote(self):
+        body = (self.guide().replace('<span class="n">2</span>', '<span class="n">7</span>')
+                .replace('<section class="group supporting" id="tests">',
+                         '<section class="group supporting" id="tests"><div class="group-head"><span class="n">4</span>'
+                         '<h2>Tests</h2></div>'))
+        _, page, err = self.build(body)
+        self.assertIn('<li><a href="#tests"><span class="n">2</span>', page)
+        self.assertIn('<div class="group-head"><span class="n">2</span><h2>Tests</h2>', page)
+        self.assertNotIn("warning", err)
+
+    def test_warns_when_the_rail_and_the_groups_disagree(self):
+        swapped = self.guide().replace('<li><a href="#core"><span class="n">1</span>Core</a></li>\n'
+                                       '      <li><a href="#tests"><span class="n">2</span>Tests</a></li>',
+                                       '<li><a href="#tests"><span class="n">1</span>Tests</a></li>\n'
+                                       '      <li><a href="#cor"><span class="n">2</span>Core</a></li>')
+        _, _, err = self.build(swapped)
+        self.assertIn("the rail links to #cor, which no group has", err)
+        self.assertIn("groups missing from the rail: core", err)
+        _, _, err = self.build(swapped.replace('href="#cor"', 'href="#core"'))
+        self.assertIn("the rail lists the groups in a different order from the page", err)
+
+    def test_rebuilding_a_built_page_gives_the_same_page(self):
+        spaced = self.guide().replace("\n    <", "\n\n    <")
+        compact = self.guide().replace("\n", "").replace("  ", "")
+        for name, body in [("plain", self.guide()), ("blank lines", spaced), ("one line", compact)]:
+            with self.subTest(name):
+                _, first, _ = self.build(body)
+                code, second, err = self.build(first)
+                self.assertEqual(code, 0, err)
+                self.assertEqual(second, first)
+
+
+class FlowTest(unittest.TestCase):
+    def test_parses_chains_labels_and_new_nodes(self):
+        nodes, new, edges = flow.parse("# comment\nA -> B* -> C : done\nC -> A : again")
+        self.assertEqual(nodes, ["A", "B", "C"])
+        self.assertEqual(new, {"B"})
+        self.assertEqual(edges, [("A", "B", ""), ("B", "C", "done"), ("C", "A", "again")])
+
+    def test_loop_is_a_back_edge(self):
+        nodes, _, edges = flow.parse("A -> B -> C\nC -> A")
+        layer, back = flow.layout(nodes, edges)
+        self.assertEqual(layer, {"A": 0, "B": 1, "C": 2})
+        self.assertEqual(back, {("C", "A")})
+
+    def test_loop_choice_ignores_line_order(self):
+        for src, loop in [("Start -> Stop\nStop -> Start : restart", ("Stop", "Start")),
+                          ("Stop -> Start : restart\nStart -> Stop", ("Stop", "Start")),
+                          ("B -> A : retry\nIn -> A -> B -> Out", ("B", "A"))]:
+            with self.subTest(src=src):
+                nodes, _, edges = flow.parse(src)
+                _, back = flow.layout(nodes, edges)
+                self.assertEqual(back, {loop})
+
+    def test_refusals(self):
+        for src, reason in [("", "no edges"), ("A B", "no '->'"), ("A -> ", "empty node"), ("A -> A", "itself")]:
+            with self.subTest(src=src), self.assertRaisesRegex(flow.FlowError, reason):
+                flow.parse(src)
+
+    def test_markers_are_unique_per_figure(self):
+        self.assertIn('id="flow-arrow-3"', flow.render("A -> B", 3))
+
+    def test_names_and_labels_are_escaped(self):
+        svg = flow.render("Map<K,V> -> A & B : a<b", 0)
+        for raw, escaped in [("Map<K,V>", "Map&lt;K,V&gt;"), ("A & B", "A &amp; B"), ("a<b", "a&lt;b")]:
+            with self.subTest(raw=raw):
+                self.assertNotIn(raw, svg)
+                self.assertIn(f">{escaped}</text>", svg)
+
+
+if __name__ == "__main__":
+    unittest.main()

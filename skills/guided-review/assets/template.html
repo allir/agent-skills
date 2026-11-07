@@ -1,0 +1,555 @@
+<title>PR 0000 Review Guide</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<script>
+(() => {
+  const root = document.documentElement;
+  root.dataset.hostTheme = root.getAttribute("data-theme") || "";
+  try {
+    const saved = localStorage.getItem("guided-review-theme");
+    if (saved === "light" || saved === "dark") root.setAttribute("data-theme", saved);
+  } catch (_) {}
+})();
+</script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&display=swap">
+<style>
+/* Navy theme, plus diff and syntax tokens built from its status and ink colours. */
+/* Layout: sticky reading-order rail beside one column of change groups; brand bar on top, brand rule above each core group. */
+:root {
+  --bg: #F7F8FB; --surface: #FFFFFF; --ink: #141B2D; --ink-2: #47546B; --ink-3: #737E90; --rule: #D9DEE7;
+  --code: #F1F4F9; --link: #1F4E9C;
+  --serious: #D92D20; --serious-ink: #B42318; --serious-bg: #FEF3F2;
+  --good: #1FA062; --good-ink: #056A70; --good-bg: #F3FFFB; --resolved-ink: #0B6E3C;
+  --info-ink: #1F4E9C; --info-bg: #EAF0FA; --warn-ink: #C96400; --warn-bg: #FFF7F2;
+  --brand: linear-gradient(90deg, #0B1F4B, #1F4E9C);
+  --shadow-card: 0 1px 3px rgba(20, 27, 45, 0.06), 0 1px 2px rgba(20, 27, 45, 0.04);
+  --row-add: rgba(31, 160, 98, 0.10); --sign-add: rgba(31, 160, 98, 0.22);
+  --row-del: rgba(217, 45, 32, 0.07); --sign-del: rgba(217, 45, 32, 0.16);
+  --tok-kw: #B42318; --tok-str: #1F4E9C; --tok-num: #C96400; --tok-type: #056A70; --tok-fn: #141B2D; --tok-com: #737E90;
+  --f-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --f-data: "DM Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --r-sm: 4px; --r-md: 8px; --r-lg: 12px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #10141C; --surface: #171C26; --ink: #EEF1F6; --ink-2: #CDD4E0; --ink-3: #8D99AD; --rule: #2A3140;
+    --code: #1D2330; --link: #7EA6E8;
+    --serious: #F04438; --serious-ink: #F97066; --serious-bg: #3A1614;
+    --good: #59C390; --good-ink: #59C390; --good-bg: #10231A; --resolved-ink: #4DB57F;
+    --info-ink: #7EA6E8; --info-bg: #16213A; --warn-ink: #FCA643; --warn-bg: #2A1E0E;
+    --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.45);
+    --brand: linear-gradient(90deg, #3B6FD1, #7EA6E8);
+    --row-add: rgba(89, 195, 144, 0.12); --sign-add: rgba(89, 195, 144, 0.26);
+    --row-del: rgba(249, 112, 102, 0.10); --sign-del: rgba(249, 112, 102, 0.24);
+    --tok-kw: #F97066; --tok-str: #7EA6E8; --tok-num: #FCA643; --tok-type: #59C390; --tok-fn: #EEF1F6; --tok-com: #8D99AD;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #10141C; --surface: #171C26; --ink: #EEF1F6; --ink-2: #CDD4E0; --ink-3: #8D99AD; --rule: #2A3140;
+  --code: #1D2330; --link: #7EA6E8;
+  --serious: #F04438; --serious-ink: #F97066; --serious-bg: #3A1614;
+  --good: #59C390; --good-ink: #59C390; --good-bg: #10231A; --resolved-ink: #4DB57F;
+  --info-ink: #7EA6E8; --info-bg: #16213A; --warn-ink: #FCA643; --warn-bg: #2A1E0E;
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.45);
+    --brand: linear-gradient(90deg, #3B6FD1, #7EA6E8);
+  --row-add: rgba(89, 195, 144, 0.12); --sign-add: rgba(89, 195, 144, 0.26);
+  --row-del: rgba(249, 112, 102, 0.10); --sign-del: rgba(249, 112, 102, 0.24);
+  --tok-kw: #F97066; --tok-str: #7EA6E8; --tok-num: #FCA643; --tok-type: #59C390; --tok-fn: #EEF1F6; --tok-com: #8D99AD;
+  color-scheme: dark;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-font-smoothing: antialiased; -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body { background: var(--bg); color: var(--ink); font: 15px/1.6 var(--f-body); margin: 0;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+body::before { content: ""; display: block; height: 4px; background: var(--brand);
+  margin-left: calc(-1 * max(16px, env(safe-area-inset-left, 0px))); margin-right: calc(-1 * max(16px, env(safe-area-inset-right, 0px))); }
+a { color: var(--link); }
+p { margin: 0; }
+h1, h2, h3 { text-wrap: balance; margin: 0; }
+
+.page { max-width: 1300px; margin: 0 auto; padding-block: 40px 64px; display: grid; grid-template-columns: 220px minmax(0, 1040px); gap: 48px; justify-content: center; }
+@media (max-width: 900px) { .page { grid-template-columns: minmax(0, 1fr); gap: 24px; } }
+main { min-width: 0; display: grid; gap: 48px; }
+main > * { min-width: 0; }
+
+.rail { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 24px); align-self: start; max-height: calc(100vh - env(safe-area-inset-top, 0px) - 48px); overflow-y: auto; font-size: 13.5px; }
+@media (max-width: 900px) { .rail { position: static; max-height: none; overflow: visible; } }
+.rail ol { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 2px; }
+.rail li a { display: flex; gap: 10px; padding: 5px 8px; border-radius: var(--r-sm); color: var(--ink); text-decoration: none; }
+.rail li a:hover, .rail li a:focus-visible { background: var(--code); outline: none; }
+.rail .n { font: 500 12px var(--f-data); color: var(--ink-3); min-width: 18px; }
+.rail .stat { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--rule); font: 12.5px/1.7 var(--f-data); color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.rail li a[aria-current="true"], .rail li a[aria-current="true"] .n { background: var(--info-bg); color: var(--info-ink); }
+.rail li.tier { font: 500 11px/1.4 var(--f-data); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); padding: 12px 8px 4px; }
+.files-index { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--rule); }
+.files-index summary { cursor: pointer; font: 500 12px/1.4 var(--f-data); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); }
+.files-index summary .n { margin-left: 4px; }
+.files-index .cov-total { margin: 8px 8px 0; font: 11.5px/1.45 var(--f-data); color: var(--ink-3); }
+.files-index ol { gap: 0; grid-template-columns: minmax(0, 1fr); }
+.files-index li a, .files-index li > span { gap: 4px; padding: 3px 6px; font: 11.5px/1.45 var(--f-data); color: var(--ink-2); }
+.files-index li > span { display: flex; }
+.files-index .path { flex: 1; min-width: 0; overflow-wrap: break-word; }
+.files-index .path b { font-weight: 500; color: var(--ink); }
+.files-index .add, .files-index .del { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.files-index .cov { flex: none; width: 8px; height: 8px; margin-top: 4.5px; border-radius: 50%; background: conic-gradient(var(--ink-3) var(--p), var(--rule) 0); }
+
+.eyebrow { font: 500 12px/1.4 var(--f-data); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); }
+header.pr { display: grid; gap: 14px; }
+h1 { font-size: clamp(30px, 5vw, 42px); line-height: 1.1; font-weight: 700; letter-spacing: -0.01em; }
+h1 code { font-size: 0.8em; background: none; padding: 0; overflow-wrap: anywhere; }
+.crumbs { font: 13px/1.5 var(--f-data); color: var(--ink-3); }
+.crumbs a { color: inherit; }
+.meta { font-size: 13px; color: var(--ink-2); display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.meta code { color: var(--ink); }
+.pill.ok::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--good); }
+.pill { display: inline-flex; align-items: center; gap: 5px; font: 500 12px/1 var(--f-body); padding: 4px 8px; border-radius: var(--r-sm); white-space: nowrap; background: var(--code); color: var(--ink-2); }
+.pill.ok { background: var(--good-bg); color: var(--good-ink); }
+.pill.bad { background: var(--serious-bg); color: var(--serious-ink); }
+.pill.info { background: var(--info-bg); color: var(--info-ink); }
+
+code { font-family: var(--f-data); font-size: 0.9em; font-variant-numeric: tabular-nums; background: var(--code); padding: 1px 5px; border-radius: var(--r-sm); }
+li code, p code { overflow-wrap: anywhere; }
+.add { color: var(--good-ink); } .del { color: var(--serious-ink); }
+
+.panel { background: var(--surface); border-radius: var(--r-lg); box-shadow: inset 0 0 0 1px var(--rule), var(--shadow-card); padding: 18px 20px; display: grid; gap: 10px; min-width: 0; }
+.panel ul, .group ul { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; }
+.panel p, .panel li, .group p, .group li { max-width: 72ch; }
+
+.table-note { font-size: 13px; color: var(--ink-2); margin-top: 8px; max-width: 72ch; }
+.tablewrap { overflow-x: auto; background: var(--surface); border-radius: var(--r-lg); box-shadow: inset 0 0 0 1px var(--rule), var(--shadow-card); }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font: 500 12px var(--f-body); color: var(--ink-3); text-wrap: balance; }
+tr:last-child td { border-bottom: 0; }
+.yes { color: var(--good-ink); font-weight: 500; } .no { color: var(--ink-3); }
+
+section.group { display: grid; gap: 16px; scroll-margin-top: 24px; min-width: 0; }
+section.group > * { min-width: 0; }
+.group-head { display: flex; gap: 14px; align-items: baseline; position: relative; padding-top: 18px; }
+.group-head::before { content: ""; position: absolute; inset: 0 0 auto; height: 2px; background: var(--brand); }
+.group-head .n { font: 500 14px var(--f-data); color: var(--ink-3); }
+.group-head h2 { font-size: 24px; line-height: 1.33; font-weight: 700; letter-spacing: -0.01em; }
+.group.supporting .group-head::before { background: var(--rule); }
+.group.supporting .group-head h2 { font-size: 20px; }
+main > .tier { margin-bottom: -28px; }
+a.gh { color: inherit; text-decoration: none; }
+a.gh:hover, a.gh:focus-visible { text-decoration: underline; text-underline-offset: 2px; outline: none; }
+.files { display: flex; flex-wrap: wrap; gap: 6px; }
+.file { font: 12px var(--f-data); padding: 3px 8px; border-radius: var(--r-sm); background: var(--code); color: var(--ink-2); overflow-wrap: anywhere; }
+.file b { font-weight: 500; color: var(--ink); }
+.file .add, .file .del { margin-left: 5px; font-weight: 500; }
+
+.diff-note { font-size: 13px; color: var(--ink-2); max-width: 72ch; margin-bottom: -10px; }
+.diff { background: var(--surface); border-radius: var(--r-md); box-shadow: inset 0 0 0 1px var(--rule); overflow: hidden; }
+.diff-title { font: 12px var(--f-data); padding: 7px 8px 7px 14px; border-bottom: 1px solid var(--rule); color: var(--ink-3); display: flex; align-items: center; gap: 10px; background: var(--code); }
+.diff-title > span:first-of-type { color: var(--ink); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.diff-title > span:nth-of-type(2) { margin-left: auto; font-size: 11.5px; white-space: nowrap; }
+.fold-toggle { flex: none; width: 18px; height: 18px; margin-left: -6px; padding: 0; border: 0; border-radius: var(--r-sm); background: none; color: var(--ink-2); font: 14px/18px var(--f-body); cursor: pointer; transition: transform 0.15s; }
+.fold-toggle:hover, .fold-toggle:focus-visible { color: var(--ink); background: var(--surface); outline: none; }
+@media (prefers-reduced-motion: reduce) { .fold-toggle { transition: none; } }
+.diff.collapsed .fold-toggle { transform: rotate(-90deg); }
+.diff.collapsed .diff-title { border-bottom: 0; }
+.diff.collapsed pre { display: none; }
+.diff-title { cursor: pointer; }
+.diff-title:hover { background: color-mix(in srgb, var(--info-bg) 45%, var(--code)); }
+.diff.collapsed .diff-title:hover { background: var(--info-bg); }
+.diff-title .show-hint { display: none; color: var(--info-ink); font-variant-numeric: tabular-nums; }
+.diff.collapsed .diff-title:hover .show-hint { display: inline; }
+.diff.collapsed .diff-title:hover .stat { display: none; }
+.diff-title .stat-a { color: var(--good-ink); } .diff-title .stat-d { color: var(--serious-ink); }
+.copy { font: 500 11px var(--f-body); color: var(--ink-3); background: var(--surface); border: 1px solid var(--rule); border-radius: var(--r-sm); padding: 2px 8px; cursor: pointer; }
+.copy:hover, .copy:focus-visible { color: var(--ink); border-color: var(--ink-3); outline: none; }
+.diff pre { display: grid; margin: 0; overflow-x: auto; font-family: var(--f-data); font-size: 12px; line-height: 20px; padding: 0; tab-size: 4; -moz-tab-size: 4; color: var(--ink); background: var(--surface); }
+.diff pre > span { display: grid; grid-template-columns: 28px max-content; white-space: pre; padding-right: 16px; }
+.diff pre > span::before { content: ""; text-align: center; user-select: none; }
+.diff pre > span.a { background: var(--row-add); }
+.diff pre > span.a::before { content: "+"; background: var(--sign-add); }
+.diff pre > span.d { background: var(--row-del); }
+.diff pre > span.d::before { content: "-"; background: var(--sign-del); }
+.diff pre > span.fold { background: var(--info-bg); color: var(--info-ink); }
+.diff pre > span.fold::before { content: "⋯"; }
+.tk-k { color: var(--tok-kw); font-weight: 500; }
+.tk-s { color: var(--tok-str); }
+.tk-c { color: var(--tok-com); font-style: italic; }
+.tk-n { color: var(--tok-num); }
+.tk-t { color: var(--tok-type); }
+.tk-f { color: var(--tok-fn); font-weight: 500; }
+.tk-p { color: var(--ink-2); }
+
+.figure { margin: 0; display: grid; gap: 8px; }
+.figure > div, .figure > svg { overflow-x: auto; }
+.figure svg.flow { display: block; max-width: 100%; height: auto; background: var(--surface); border-radius: var(--r-md); box-shadow: inset 0 0 0 1px var(--rule); }
+.figure figcaption { font-size: 13px; color: var(--ink-2); max-width: 72ch; }
+svg.flow .node rect { fill: var(--surface); stroke: var(--ink-3); stroke-width: 1; }
+svg.flow .node.new rect { fill: var(--info-bg); stroke: var(--info-ink); stroke-width: 1.5; }
+svg.flow .node text { font: 500 12px var(--f-data); fill: var(--ink); text-anchor: middle; }
+svg.flow .node.new text { fill: var(--info-ink); }
+svg.flow .edge { fill: none; stroke: var(--ink-3); stroke-width: 1.4; }
+svg.flow marker path { fill: var(--ink-3); }
+svg.flow .edge-label rect { fill: var(--surface); }
+svg.flow .edge-label text { font: 11px var(--f-data); fill: var(--ink-2); text-anchor: middle; }
+
+.finding { border-radius: var(--r-lg); padding: 14px 18px; display: grid; gap: 8px; font-size: 14.5px; background: var(--warn-bg); box-shadow: inset 3px 0 0 var(--warn-ink); }
+.finding .tag { font: 500 12px/1.4 var(--f-data); letter-spacing: 0.06em; text-transform: uppercase; color: var(--warn-ink); }
+.finding h3 { font-size: 15.5px; font-weight: 600; }
+.finding.minor { background: var(--surface); box-shadow: inset 0 0 0 1px var(--rule); }
+.finding.minor .tag { color: var(--ink-3); }
+.finding.resolved { background: var(--surface); box-shadow: inset 0 0 0 1px var(--rule); }
+.finding.resolved > .tag { color: var(--ink-3); }
+.resolution { display: grid; gap: 4px; border-top: 1px solid var(--rule); padding-top: 10px; margin-top: 2px; }
+.resolution .tag { color: var(--resolved-ink); font-weight: 500; text-transform: none; letter-spacing: normal; }
+.resolution p { color: var(--ink-2); }
+
+.theme-toggle { display: flex; gap: 4px; margin-top: 14px; }
+.theme-toggle button { font: 500 11.5px var(--f-body); color: var(--ink-3); background: var(--surface); border: 1px solid var(--rule); border-radius: var(--r-sm); padding: 3px 9px; cursor: pointer; }
+.theme-toggle button:hover, .theme-toggle button:focus-visible { color: var(--ink); border-color: var(--ink-3); outline: none; }
+.theme-toggle button[aria-pressed="true"] { background: var(--info-bg); color: var(--info-ink); border-color: transparent; }
+.code-toggle { margin-top: 6px; }
+
+/* Print and PDF: A4, one column, light theme, no rail, wrapped code. */
+@page { size: A4; margin: 14mm 13mm 16mm; }
+@media print {
+  :root, :root:not([data-theme="light"]), :root[data-theme="dark"] {
+    --bg: #FFFFFF; --surface: #FFFFFF; --ink: #141B2D; --ink-2: #47546B; --ink-3: #737E90; --rule: #D9DEE7;
+    --code: #F1F4F9; --link: #1F4E9C;
+    --serious: #D92D20; --serious-ink: #B42318; --serious-bg: #FEF3F2;
+    --good: #1FA062; --good-ink: #056A70; --good-bg: #F3FFFB; --resolved-ink: #0B6E3C;
+    --info-ink: #1F4E9C; --info-bg: #EAF0FA; --warn-ink: #C96400; --warn-bg: #FFF7F2;
+    --shadow-card: none;
+    --row-add: rgba(31, 160, 98, 0.10); --sign-add: rgba(31, 160, 98, 0.22);
+    --row-del: rgba(217, 45, 32, 0.07); --sign-del: rgba(217, 45, 32, 0.16);
+    --tok-kw: #B42318; --tok-str: #1F4E9C; --tok-num: #C96400; --tok-type: #056A70; --tok-fn: #141B2D; --tok-com: #737E90;
+    color-scheme: light;
+  }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { font-size: 10.5pt; padding-left: 0; padding-right: 0; }
+  body::before { margin-left: 0; margin-right: 0; }
+  .page { display: block; max-width: none; padding-block: 12pt 0; }
+  .rail, .copy, .theme-toggle, .fold-toggle, .show-hint { display: none !important; }
+  .diff.collapsed .diff-title .stat { display: inline !important; }
+  .diff.collapsed pre { display: grid; }
+  .diff.collapsed .diff-title { border-bottom: 1px solid var(--rule); }
+  main { gap: 20pt; }
+  h1 { font-size: 22pt; }
+  .group-head h2 { font-size: 15pt; }
+  .group-head, h3 { break-after: avoid; }
+  .panel, .tablewrap, .finding, .diff, .figure, tr { break-inside: avoid; }
+  .tablewrap { overflow: visible; }
+  .diff pre { grid-template-columns: minmax(0, 1fr); overflow: visible; font-size: 8.5pt; line-height: 1.45; }
+  .diff pre > span { grid-template-columns: 18px minmax(0, 1fr); padding-right: 6px; }
+  .diff pre > span > span { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .diff-title > span:first-of-type { white-space: normal; }
+  a { color: inherit; text-decoration: none; }
+  .crumbs a::after { content: " (" attr(href) ")"; }
+}
+</style>
+
+<div class="page">
+  <nav class="rail" aria-label="Reading order">
+    <p class="eyebrow">Reading order</p>
+    <ol>
+      <li><a href="#core"><span class="n"></span>The core change</a></li>
+      <li><a href="#plumbing"><span class="n"></span>Plumbing</a></li>
+      <li><a href="#review"><span class="n"></span>Review notes</a></li>
+    </ol>
+    <div class="stat">
+      <div>0 files · 0 commits</div>
+      <div><span class="add">+0</span> <span class="del">−0</span></div>
+      <div>base main</div>
+    </div>
+  </nav>
+
+  <main>
+    <header class="pr">
+      <div class="crumbs"><a href="https://github.com/OWNER/REPO/pull/0000">OWNER/REPO#0000</a> · branch-name</div>
+      <h1>feat(scope): PR title as written on GitHub</h1>
+      <div class="meta">
+        <span class="pill ok">Open</span>
+        <span>·</span>
+        <span>PR author</span>
+        <span>·</span>
+        <span>head <code>0000000</code></span>
+        <span>·</span>
+        <span>deps: module vX → vY</span>
+      </div>
+    </header>
+
+    <div class="panel">
+      <p class="eyebrow">Summary</p>
+      <p>Why the PR exists: the problem, with numbers where there are some.</p>
+      <ul>
+        <li><b>Bold lead.</b> One bullet per headline change, three or four in all.</li>
+      </ul>
+    </div>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Mode</th><th>Sent</th><th>Logged</th></tr></thead>
+        <tbody>
+          <tr><td><code>--flag</code></td><td class="no">no</td><td>summary</td></tr>
+          <tr><td>none</td><td class="yes">yes</td><td class="no">none</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="table-note">Before traced from the base, after from the head; the --flag row was run.</p>
+
+    <section class="group" id="core">
+      <div class="group-head"><span class="n"></span><h2>The core change</h2></div>
+      <div class="files"><span class="file"><b>path/to/core.go</b><span class="add">+12</span><span class="del">−3</span></span><span class="file"><b>path/to/other.go</b></span></div>
+      <p>What this group changes and why, in plain prose.</p>
+      <figure class="figure"><!--FLOW
+Caller -> NewThing* -> Store
+--><figcaption>One sentence on what to notice in the shape. Only when the change is about shape.</figcaption></figure>
+      <p class="diff-note">One line on what this snippet shows and what to look at in it.</p>
+      <div class="diff">
+        <div class="diff-title"><span>path/to/core.go</span><span>FuncName</span></div>
+<pre><span class="c">func Example(ctx context.Context) error {</span>
+<span class="d">	old := legacy()</span>
+<span class="a">	cur := replacement("value", 42)</span>
+<span class="fold"></span>
+<span class="c">	return nil</span>
+<span class="c">}</span></pre>
+      </div>
+      <ul>
+        <li>A consequence: what now behaves differently, and for whom.</li>
+        <li>A non-obvious detail: the trick, the edge case, or why it is shaped this way.</li>
+      </ul>
+    </section>
+
+    <section class="group supporting" id="plumbing">
+      <div class="group-head"><span class="n"></span><h2>Plumbing</h2></div>
+      <div class="files"><span class="file"><b>path/to/caller.go</b><span class="add">+2</span><span class="del">−1</span></span></div>
+      <p>How the new value reaches its call sites, with one representative snippet.</p>
+    </section>
+
+    <section class="group" id="review">
+      <div class="group-head"><span class="n"></span><h2>Review notes</h2></div>
+      <div class="finding">
+        <span class="tag">Worth a look</span>
+        <h3>A likely defect, stated as a claim</h3>
+        <p>The concrete call path that triggers it, the effect, and a fix sketch.</p>
+      </div>
+      <div class="finding resolved">
+        <span class="tag">Worth a look</span>
+        <h3>A finding that was fixed, as originally written</h3>
+        <p>The original write-up, kept for the record.</p>
+        <div class="resolution">
+          <span class="tag">✓ Resolved in 0000000</span>
+          <p>The new behaviour, and the test that proves it.</p>
+        </div>
+      </div>
+      <div class="finding minor">
+        <span class="tag">Accepted risk</span>
+        <h3>A trade-off the author accepted</h3>
+        <p>What happens, and why it is fine.</p>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+(() => {
+  const KW = {
+    go: "break case chan const continue default defer else fallthrough for func go goto if import interface map package range return select struct switch type var",
+    java: "abstract assert break case catch class const continue default do else enum extends final finally for goto if implements import instanceof interface native new package permits private protected public record return sealed static super switch synchronized this throw throws transient try var void volatile while yield",
+    ts: "abstract as async await break case catch class const constructor continue declare default delete do else enum export extends finally for from function get if implements import in instanceof interface keyof let new of private protected public readonly return satisfies set static super switch this throw try type typeof var void while yield",
+    py: "and as assert async await break case class continue def del elif else except finally for from global if import in is lambda match nonlocal not or pass raise return try while with yield",
+    sh: "case do done elif else esac export fi for function if in local return then until while",
+    yaml: "",
+    generic: "",
+  };
+  const BUILTIN = {
+    go: "any append bool byte cap close complex copy delete error false float32 float64 iota int int8 int16 int32 int64 len make new nil panic print recover rune string true uint uint8 uint16 uint32 uint64 uintptr",
+    java: "boolean byte char double false float int long null short String true",
+    ts: "bigint boolean false never null number object string symbol true undefined unknown",
+    py: "bool dict False float int len list None print range self set str True tuple",
+    sh: "false true",
+    yaml: "false no null off on true yes",
+    generic: "false null true",
+  };
+  const EXT = { go: "go", java: "java", kt: "java", ts: "ts", tsx: "ts", js: "ts", jsx: "ts", mjs: "ts", py: "py", sh: "sh", bash: "sh", zsh: "sh", yaml: "yaml", yml: "yaml" };
+  const HASH_COMMENTS = new Set(["py", "sh", "yaml"]);
+  const sets = {};
+  for (const lang of Object.keys(KW)) sets[lang] = { kw: new Set(KW[lang].split(" ").filter(Boolean)), builtin: new Set(BUILTIN[lang].split(" ")) };
+
+  function tokenizer(lang) {
+    const comment = lang === "generic" ? "(?!)" : HASH_COMMENTS.has(lang) ? "#.*$" : "\\/\\/.*$|\\/\\*.*?(?:\\*\\/|$)";
+    const strings = ['"(?:\\\\.|[^"\\\\])*"'];
+    if (lang === "go") strings.push("`[^`]*`", "'(?:\\\\.|[^'\\\\])'");
+    else strings.push("'(?:\\\\.|[^'\\\\])*'");
+    if (lang === "ts" || lang === "sh") strings.push("`(?:\\\\.|[^`\\\\])*`");
+    const number = "\\b0[xob]?[\\da-fA-F_]+\\b|\\b\\d+(?:\\.\\d+)?\\b";
+    return new RegExp(`(${comment})|(${strings.join("|")})|(${number})|([A-Za-z_$][\\w$]*)|([{}()\\[\\],;.:=&*!<>|+\\-%^?@~]+)|(\\s+)|(.)`, "g");
+  }
+  const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  function highlight(src, lang) {
+    const re = tokenizer(lang), { kw, builtin } = sets[lang];
+    let out = "", m;
+    while ((m = re.exec(src)) !== null) {
+      const [tok, com, str, num, id, punct] = m;
+      if (com) out += `<span class="tk-c">${esc(tok)}</span>`;
+      else if (str) out += `<span class="tk-s">${esc(tok)}</span>`;
+      else if (num) out += `<span class="tk-n">${tok}</span>`;
+      else if (id) {
+        if (kw.has(id)) out += `<span class="tk-k">${id}</span>`;
+        else if (builtin.has(id)) out += `<span class="tk-t">${id}</span>`;
+        else if (src[re.lastIndex] === "(") out += `<span class="tk-f">${id}</span>`;
+        else if (/^[A-Z]/.test(id)) out += `<span class="tk-t">${id}</span>`;
+        else out += esc(id);
+      } else if (punct) out += `<span class="tk-p">${esc(tok)}</span>`;
+      else out += esc(tok);
+    }
+    return out;
+  }
+
+  function setCollapsed(diff, on) {
+    const fold = diff.querySelector(".fold-toggle");
+    if (!fold) return;
+    diff.classList.toggle("collapsed", on);
+    fold.setAttribute("aria-expanded", String(!on));
+    fold.title = on ? "Show code" : "Hide code";
+  }
+
+  document.querySelectorAll(".diff").forEach(diff => {
+    const pre = diff.querySelector("pre");
+    const title = diff.querySelector(".diff-title");
+    if (!pre || !title) return;
+    const path = title.children[0]?.textContent ?? "";
+    const file = path.trim().split(/\s+/)[0];
+    let lang = diff.dataset.lang || EXT[file.split(".").pop().toLowerCase()] || "generic";
+    if (!(lang in KW)) lang = "generic";
+    [...pre.childNodes].forEach(n => { if (n.nodeType === Node.TEXT_NODE) n.remove(); });
+    let adds = 0, dels = 0;
+    pre.querySelectorAll(":scope > span").forEach(line => {
+      if (line.classList.contains("fold")) {
+        line.textContent = `${line.dataset.hidden || "unchanged"} lines hidden`;
+        return;
+      }
+      const text = line.textContent;
+      if (line.classList.contains("a")) adds++;
+      if (line.classList.contains("d")) dels++;
+      line.innerHTML = `<span>${highlight(text, lang) || " "}</span>`;
+    });
+
+    if (!title.children[1]) title.appendChild(document.createElement("span"));
+    const stat = document.createElement("span");
+    stat.className = "stat";
+    stat.title = "Lines added and removed in this snippet";
+    stat.style.fontVariantNumeric = "tabular-nums";
+    if (adds) { const a = document.createElement("span"); a.className = "stat-a"; a.textContent = `+${adds}`; stat.append(a); }
+    if (adds && dels) stat.append(" ");
+    if (dels) { const d = document.createElement("span"); d.className = "stat-d"; d.textContent = `−${dels}`; stat.append(d); }
+    title.appendChild(stat);
+    const hint = document.createElement("span");
+    hint.className = "show-hint";
+    hint.textContent = `Show ${pre.querySelectorAll(":scope > span:not(.fold)").length} lines`;
+    title.appendChild(hint);
+
+    const btn = document.createElement("button");
+    btn.className = "copy";
+    btn.type = "button";
+    btn.textContent = "Copy";
+    btn.addEventListener("click", () => {
+      const code = [...pre.querySelectorAll(":scope > span:not(.d):not(.fold)")].map(l => l.textContent.replace(/^ $/, "")).join("\n");
+      const done = () => { btn.textContent = "Copied"; setTimeout(() => (btn.textContent = "Copy"), 1400); };
+      const select = () => { const r = document.createRange(); r.selectNodeContents(pre); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); };
+      navigator.clipboard ? navigator.clipboard.writeText(code).then(done, select) : select();
+    });
+    title.appendChild(btn);
+
+    const fold = document.createElement("button");
+    fold.className = "fold-toggle";
+    fold.type = "button";
+    fold.textContent = "▾";
+    fold.setAttribute("aria-label", `Code of ${path}`);
+    fold.addEventListener("click", () => setCollapsed(diff, !diff.classList.contains("collapsed")));
+    title.prepend(fold);
+    title.addEventListener("click", e => {
+      if (e.target.closest("a, button") || String(getSelection())) return;
+      setCollapsed(diff, !diff.classList.contains("collapsed"));
+    });
+    setCollapsed(diff, diff.classList.contains("collapsed"));
+  });
+
+  const THEME_KEY = "guided-review-theme";
+  const root = document.documentElement;
+  const toggle = document.createElement("div");
+  toggle.className = "theme-toggle";
+  toggle.setAttribute("role", "group");
+  toggle.setAttribute("aria-label", "Theme");
+  const buttons = ["auto", "light", "dark"].map(choice => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.dataset.choice = choice;
+    b.textContent = choice[0].toUpperCase() + choice.slice(1);
+    b.addEventListener("click", () => {
+      apply(choice);
+      try { localStorage.setItem(THEME_KEY, choice); } catch (_) {}
+    });
+    toggle.append(b);
+    return b;
+  });
+  function apply(choice) {
+    if (choice !== "auto") root.setAttribute("data-theme", choice);
+    else if (root.dataset.hostTheme) root.setAttribute("data-theme", root.dataset.hostTheme);
+    else root.removeAttribute("data-theme");
+    buttons.forEach(b => b.setAttribute("aria-pressed", String(b.dataset.choice === choice)));
+  }
+  let saved = null;
+  try { saved = localStorage.getItem(THEME_KEY); } catch (_) {}
+  const initial = saved || "auto";
+  (document.querySelector(".rail") || document.querySelector("header.pr") || document.body).append(toggle);
+  apply(["auto", "light", "dark"].includes(initial) ? initial : "auto");
+
+  const CODE_KEY = "guided-review-code";
+  const codeToggle = document.createElement("div");
+  codeToggle.className = "theme-toggle code-toggle";
+  const codeButton = document.createElement("button");
+  codeButton.type = "button";
+  codeButton.textContent = "Collapse code";
+  codeToggle.append(codeButton);
+  function collapseAll(on) {
+    document.querySelectorAll(".diff").forEach(d => setCollapsed(d, on));
+    codeButton.setAttribute("aria-pressed", String(on));
+  }
+  codeButton.addEventListener("click", () => {
+    const on = codeButton.getAttribute("aria-pressed") !== "true";
+    collapseAll(on);
+    try { localStorage.setItem(CODE_KEY, on ? "collapsed" : "shown"); } catch (_) {}
+    spy();
+  });
+  if (document.querySelector(".fold-toggle")) {
+    toggle.after(codeToggle);
+    let codeSaved = null;
+    try { codeSaved = localStorage.getItem(CODE_KEY); } catch (_) {}
+    if (codeSaved === "collapsed") collapseAll(true);
+    else codeButton.setAttribute("aria-pressed", "false");
+  }
+
+  const rail = document.querySelector(".rail");
+  const spyLinks = [...document.querySelectorAll('.rail > ol a[href^="#"]')];
+  const spyTargets = spyLinks.map(a => document.getElementById(decodeURIComponent(a.hash.slice(1))));
+  let current = -1, queued = false;
+  function spy() {
+    queued = false;
+    const line = innerHeight * 0.3;
+    let i = -1;
+    spyTargets.forEach((t, j) => { if (t && t.getBoundingClientRect().top <= line) i = j; });
+    if (i >= 0 && innerHeight + scrollY >= document.documentElement.scrollHeight - 2) i = spyTargets.length - 1;
+    if (i === current) return;
+    current = i;
+    spyLinks.forEach((a, j) => j === i ? a.setAttribute("aria-current", "true") : a.removeAttribute("aria-current"));
+    if (i >= 0 && rail && rail.scrollHeight > rail.clientHeight) rail.scrollTop = spyLinks[i].offsetTop - rail.clientHeight / 2;
+  }
+  if (spyLinks.length) {
+    addEventListener("scroll", () => { if (!queued) { queued = true; requestAnimationFrame(spy); } }, { passive: true });
+    addEventListener("resize", spy);
+    spy();
+  }
+})();
+</script>

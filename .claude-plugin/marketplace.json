@@ -29,6 +29,17 @@
       ],
       "category": "development",
       "tags": ["go", "golang"]
+    },
+    {
+      "name": "guided-review",
+      "description": "Guided review pages for pull requests and local branches: core change first, diffs explained in prose, verified review notes",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/guided-review"
+      ],
+      "category": "development",
+      "tags": ["code-review", "github"]
     }
   ]
 }
